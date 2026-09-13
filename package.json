@@ -2,6 +2,7 @@
   "name": "skill-telemetry",
   "version": "0.1.0",
   "description": "An Oh My Pi plugin that reports which skills the agent actually loads, and how often.",
+  "license": "MIT",
   "type": "module",
   "files": ["src"],
   "omp": { "extensions": ["./src/main.ts"] },

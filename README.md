@@ -6,6 +6,7 @@ An Oh My Pi plugin that reports which skills the agent actually loads, and how o
 
 [![CI](https://img.shields.io/github/actions/workflow/status/sazlin/skill-telemetry/ci.yml?branch=master)](https://github.com/sazlin/skill-telemetry/actions/workflows/ci.yml)
 [![Status: alpha](https://img.shields.io/badge/status-alpha-orange)](https://github.com/sazlin/skill-telemetry)
+[![License](https://img.shields.io/github/license/sazlin/skill-telemetry)](LICENSE)
 
 </div>
 
@@ -129,4 +130,4 @@ just test
 
 ## License
 
-This repository does not currently include a LICENSE file.
+Licensed under the [MIT License](LICENSE).
