@@ -1,0 +1,24 @@
+---
+description: Keep agent and skill eval fixtures next to the artifact they test. Applies
+  when adding or moving evals.
+alwaysApply: true
+metadata:
+  loadout.managed: 'true'
+  loadout.source: rules/core/colocated-evals.mdc
+  loadout.sha: 9180c3a
+---
+
+# Colocated evals
+
+Eval fixtures, goldens, blank transcripts, and `evals.json` live with the
+artifact they score. Do not add a parallel eval tree under `tests/evals/`,
+the repo root, or another skill/agent.
+
+- Agent evals: `agents/<name>/evals/` (`evals.json`, `files/`, `goldens/`,
+  `blank_runs/`, `ralph-loop.md` as used by this repo).
+- Skill evals: `skills/<name>/evals/` (`evals.json` plus `files/`; optional
+  goldens/blanks when a pytest scorer exists).
+- Sync does not vendor `evals/`. Leave fixtures in the loadout repo.
+
+When you add an agent or skill, add its evals in that same directory tree in
+the same change.

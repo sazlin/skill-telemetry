@@ -1,0 +1,25 @@
+---
+description: Open GitHub PRs ready for review, never as drafts. If the change is not
+  ready, do not open a PR; ask the user what is blocking.
+alwaysApply: true
+metadata:
+  loadout.managed: 'true'
+  loadout.source: rules/core/pr-ready-for-review.mdc
+  loadout.sha: 9180c3a
+---
+
+# PRs ready for review
+
+If an agent believes a change is ready for review, any GitHub pull request it
+opens **must** be marked ready for review. Never open a GitHub PR as a draft.
+
+- Create the PR ready for review (`draft: false`). Do not pass `--draft`.
+- If a PR already exists as a draft and the change is ready, mark it ready
+  for review.
+- If the change is **not** ready for review, do not open a PR. Ask the user
+  for the critical input that unblocks readiness (missing product decision,
+  failing verification, unclear scope, secrets, review blockers).
+- Do not open a draft to share progress. If your charter allows publishing
+  a branch, push it if useful, then ask; if it forbids git push (for example
+  playwright_healer), ask without pushing. A draft PR is not an acceptable
+  status update.

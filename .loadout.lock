@@ -1,0 +1,290 @@
+{
+  "lockfile_version": 1,
+  "source": "https://github.com/sazlin/loadout",
+  "ref": "main",
+  "resolved_sha": "9180c3a1da0d7283bc7e8ea82df9e54cb40b533b",
+  "synced_at": "2026-09-13T19:14:25Z",
+  "tool_version": "0.35.0",
+  "files": [
+    {
+      "dest": ".claude/agents/davinci.md",
+      "src": "agents/davinci/davinci.md",
+      "sha256": "b3510039528f2ab0575f32a9a427ef2531050f9c3c5b93398728692618eb8812"
+    },
+    {
+      "dest": ".claude/settings.json",
+      "src": "__generated__/claude/settings.json",
+      "sha256": "6966130fb3edef976c154830908ca2dc891a4371d33d455fa778931bf1a57ed7"
+    },
+    {
+      "dest": ".claude/skills/anti-sleep/SKILL.md",
+      "src": "skills/anti-sleep/SKILL.md",
+      "sha256": "57adbc012a07464be7dae94f7ee1ca6c1241354c297f4e98fffc3d3017cc723f"
+    },
+    {
+      "dest": ".claude/skills/anti-sleep/scripts/keep-awake",
+      "src": "skills/anti-sleep/scripts/keep-awake",
+      "sha256": "71e6b575e890fe49479f9f26f79b907b48ec861a787cf160ee9fe3813042aa0e",
+      "mode": "755"
+    },
+    {
+      "dest": ".claude/skills/decisions/SKILL.md",
+      "src": "skills/decisions/SKILL.md",
+      "sha256": "8f6a3e41e380f552e50e4d91eafc481663d95932b9453e2e571817aac86c852a"
+    },
+    {
+      "dest": ".claude/skills/github-upload-media-to-pr/SKILL.md",
+      "src": "skills/github-upload-media-to-pr/SKILL.md",
+      "sha256": "1d78b6d884a77d07a831c723e9995069f057b9e1fe1c186e83f6d236b9f4738f"
+    },
+    {
+      "dest": ".claude/skills/learn/SKILL.md",
+      "src": "skills/learn/SKILL.md",
+      "sha256": "6df7c361835ba08532724556697883d46372b9e4f77bc8abd3fcdc13c97582f2"
+    },
+    {
+      "dest": ".claude/skills/make-readme/README_TEMPLATE.md",
+      "src": "skills/make-readme/README_TEMPLATE.md",
+      "sha256": "5fdb35422ab6ad8be94aef33faf04f96d7a8fd30889296acfd3377bb8fcd0879"
+    },
+    {
+      "dest": ".claude/skills/make-readme/SKILL.md",
+      "src": "skills/make-readme/SKILL.md",
+      "sha256": "e9d945d4e2d728a5b159bc1c455555eadb2f8669b09a9eab79fe0ea67dadb490"
+    },
+    {
+      "dest": ".claude/skills/make-readme/references/badges.md",
+      "src": "skills/make-readme/references/badges.md",
+      "sha256": "9bdfce83a330d3afa5db243750302b4dc1b606f0790c77473e38657007da60e6"
+    },
+    {
+      "dest": ".claude/skills/make-readme/references/evidence.md",
+      "src": "skills/make-readme/references/evidence.md",
+      "sha256": "accac4ae5be12db2b72a117dc4ab4fd30a69e7cdaf5679940a120ee8077d6a28"
+    },
+    {
+      "dest": ".claude/skills/make-readme/references/project-types.md",
+      "src": "skills/make-readme/references/project-types.md",
+      "sha256": "0d58a0bdac5eaf52ff199b860677fee2031fd6daff885cd1e920386f0aba4f5f"
+    },
+    {
+      "dest": ".claude/skills/make-readme/references/section-playbook.md",
+      "src": "skills/make-readme/references/section-playbook.md",
+      "sha256": "89d2d702ff61c086b353e78b4fb472f0ad4df55eb5ad687a7a72b4a50b095496"
+    },
+    {
+      "dest": ".claude/skills/make-readme/scripts/corpus_analyzer.py",
+      "src": "skills/make-readme/scripts/corpus_analyzer.py",
+      "sha256": "755e775782b732105325e707d0fae40212569ffd329252af548706e95e1bd7e5",
+      "mode": "755"
+    },
+    {
+      "dest": ".claude/skills/make-readme/scripts/inspect_repo.py",
+      "src": "skills/make-readme/scripts/inspect_repo.py",
+      "sha256": "34a71820ee2ceed65a96c6fc0fe3486fbc732110ff2fe468019d6fb50532ec85",
+      "mode": "755"
+    },
+    {
+      "dest": ".claude/skills/make-readme/scripts/score_readme.py",
+      "src": "skills/make-readme/scripts/score_readme.py",
+      "sha256": "9fa25da5e90823e9b3fd3ab3e3f4c57be0c920cb202cb32eb1edf0fb6a6f840a",
+      "mode": "755"
+    },
+    {
+      "dest": ".claude/skills/next-decision/SKILL.md",
+      "src": "skills/next-decision/SKILL.md",
+      "sha256": "e3a152995eee01b086fa165c9a0cba9a44c857b59aa34e40fd9ebda180c78f42"
+    },
+    {
+      "dest": ".claude/skills/ponytail-audit/SKILL.md",
+      "src": "skills/ponytail-audit/SKILL.md",
+      "sha256": "5ca2b91e8272c2e1321031cc4e6ec97f2bac11ce10da9e56f236d97eb898986d"
+    },
+    {
+      "dest": ".claude/skills/ponytail-audit/SOURCE.md",
+      "src": "skills/ponytail-audit/SOURCE.md",
+      "sha256": "3e9735f475fd502b7e0fbb9636794b145081ea4234f11c1fac3c3940373b9737"
+    },
+    {
+      "dest": ".claude/skills/ponytail-debt/SKILL.md",
+      "src": "skills/ponytail-debt/SKILL.md",
+      "sha256": "41fa0076e13f7ef9f481d1f703c9cb57080b7ed5ae67b7e76792fa148a349247"
+    },
+    {
+      "dest": ".claude/skills/ponytail-debt/SOURCE.md",
+      "src": "skills/ponytail-debt/SOURCE.md",
+      "sha256": "268164091f8559fed97fdf35a2f1986183e52182ce6ce49ed423619fa3b6ae92"
+    },
+    {
+      "dest": ".claude/skills/ponytail-gain/SKILL.md",
+      "src": "skills/ponytail-gain/SKILL.md",
+      "sha256": "ff03d41bcb0a14bf56915db365dccfe7542bb87ddffebfccb221737f484ce4e7"
+    },
+    {
+      "dest": ".claude/skills/ponytail-gain/SOURCE.md",
+      "src": "skills/ponytail-gain/SOURCE.md",
+      "sha256": "cbb548b1084a500f8bebe13510c19533e2f669141bd6f3141bf86a5feb5a55b5"
+    },
+    {
+      "dest": ".claude/skills/ponytail-help/SKILL.md",
+      "src": "skills/ponytail-help/SKILL.md",
+      "sha256": "a8669c5d75bd6065ad4f30c64d006d20a882f1ddb7107d4c9472a565ce66589e"
+    },
+    {
+      "dest": ".claude/skills/ponytail-help/SOURCE.md",
+      "src": "skills/ponytail-help/SOURCE.md",
+      "sha256": "8526add99f8e896d5f5ae05879a9eec5d3ab14b33d94bd03dec978b7cde1f5aa"
+    },
+    {
+      "dest": ".claude/skills/ponytail-review/SKILL.md",
+      "src": "skills/ponytail-review/SKILL.md",
+      "sha256": "23c27e01f6c8d97cdf06c023234fdc1f021fc01171ee2f7a8a1b78b54db39694"
+    },
+    {
+      "dest": ".claude/skills/ponytail-review/SOURCE.md",
+      "src": "skills/ponytail-review/SOURCE.md",
+      "sha256": "a13c17ba910712ba753cf8cad56976055da36adeba057f8464a1c51fe03c312e"
+    },
+    {
+      "dest": ".claude/skills/ponytail/SKILL.md",
+      "src": "skills/ponytail/SKILL.md",
+      "sha256": "3b7295c19ed6d9a60bee5cd8b5843e4fa358573c930c322bd29ffc00eeeeb24a"
+    },
+    {
+      "dest": ".claude/skills/ponytail/SOURCE.md",
+      "src": "skills/ponytail/SOURCE.md",
+      "sha256": "6875ad5089eac24517c184194796f9156f4e58cc0e627d0f7519c8a6a8832e01"
+    },
+    {
+      "dest": ".claude/skills/release-checklist/SKILL.md",
+      "src": "skills/release-checklist/SKILL.md",
+      "sha256": "9ced333adc3fefdb461a358a1941f2af9adc7be007aa177de206b3b0968c7614"
+    },
+    {
+      "dest": ".claude/skills/rtk/SKILL.md",
+      "src": "skills/rtk/SKILL.md",
+      "sha256": "b8eb89f0810711432d638b7b4ee0148bb9d750a01f626fe3f31b511d5b0d5e02"
+    },
+    {
+      "dest": ".claude/skills/rtk/SOURCE.md",
+      "src": "skills/rtk/SOURCE.md",
+      "sha256": "598344ae13f24b72c1f954df0649bdd80400c80a202f2383c86f9d0d75b1c86e"
+    },
+    {
+      "dest": ".claude/skills/unslop/SKILL.md",
+      "src": "skills/unslop/SKILL.md",
+      "sha256": "0ea329badad58fcaeb733fd1cd477666bd297ae6bbc1725f3557cb85a5e98c0b"
+    },
+    {
+      "dest": ".claude/skills/unslop/SOURCE.md",
+      "src": "skills/unslop/SOURCE.md",
+      "sha256": "a2fa47162fa725d03006de18274d2a585d88a75dc85670a968310b4eeafbf10c"
+    },
+    {
+      "dest": ".cursor/hooks.json",
+      "src": "__generated__/cursor/hooks.json",
+      "sha256": "a415f4a9694dde45f1a9a39324121e727dfb83762149b47f77509af591a0593e"
+    },
+    {
+      "dest": ".cursor/hooks/deny-dangerous/dangerous-patterns.txt",
+      "src": "hooks/deny-dangerous/dangerous-patterns.txt",
+      "sha256": "9bd6e7ea686253890b4c59b4bf50281ee2b901abfd5bd4160b3d6d4e2c19cdb8"
+    },
+    {
+      "dest": ".cursor/hooks/deny-dangerous/deny-dangerous.sh",
+      "src": "hooks/deny-dangerous/deny-dangerous.sh",
+      "sha256": "7c01658581faa4afcb8c95280dce34bde8345bf47b4aeec0cd4510b6cc3eb35e",
+      "mode": "755"
+    },
+    {
+      "dest": ".cursor/hooks/deny-dangerous/test-guard.sh",
+      "src": "hooks/deny-dangerous/test-guard.sh",
+      "sha256": "8347c36e8947ba86f1960e6dcd313891297bb8532e5f8ab9ba91164fb260bcde",
+      "mode": "755"
+    },
+    {
+      "dest": ".cursor/hooks/ponytail-activate/SOURCE.md",
+      "src": "hooks/ponytail-activate/SOURCE.md",
+      "sha256": "6743eb0730b645a1911951c473cfa77c91cb3c016c5fda026a4904f0fdcfd208"
+    },
+    {
+      "dest": ".cursor/hooks/ponytail-activate/ponytail-activate",
+      "src": "hooks/ponytail-activate/ponytail-activate",
+      "sha256": "a9d6edc5e0f8525b8eedd48dbe577bc89738bfe6ab3dc648474d2840d49d5d35",
+      "mode": "755"
+    },
+    {
+      "dest": ".cursor/hooks/rtk-rewrite/SOURCE.md",
+      "src": "hooks/rtk-rewrite/SOURCE.md",
+      "sha256": "0e66a740fc41b657111043aeace3da495d1feb34018dc2331c02db6d3965875b"
+    },
+    {
+      "dest": ".cursor/hooks/rtk-rewrite/rtk-rewrite.sh",
+      "src": "hooks/rtk-rewrite/rtk-rewrite.sh",
+      "sha256": "70b6ca39d5321701954f483db20bd57313582de97937c3dc6fc8a9b145643e21",
+      "mode": "755"
+    },
+    {
+      "dest": ".cursor/mcp.json",
+      "src": "__generated__/cursor/mcp.json",
+      "sha256": "47f3a1c1bb9c7ffa672079d82bf7b0ba8137006f201b0821bf1c0b40974dadd5"
+    },
+    {
+      "dest": ".cursor/rules/agent-authoring.mdc",
+      "src": "rules/agents/agent-authoring.mdc",
+      "sha256": "baffdef4a17917163e2a6bbebcd5b852cbe6633756d20dd73373ba3b38dc93a2"
+    },
+    {
+      "dest": ".cursor/rules/colocated-evals.mdc",
+      "src": "rules/core/colocated-evals.mdc",
+      "sha256": "6c973618fe7ca79dd1b293b8e34fa9882fbbd4b2ac7953859b169b508b0b71c3"
+    },
+    {
+      "dest": ".cursor/rules/commit-style.mdc",
+      "src": "rules/core/commit-style.mdc",
+      "sha256": "e2e778c78923ef9ae6e4949d175d953e1d0bf8ba57d1ea4f3231e3278b28fec9"
+    },
+    {
+      "dest": ".cursor/rules/no-cursor-coauthor.mdc",
+      "src": "rules/core/no-cursor-coauthor.mdc",
+      "sha256": "266c68c8caaa11dd7a9b069f2fd679f58ec6b7a79e20d3259e4b7ccbd986b757"
+    },
+    {
+      "dest": ".cursor/rules/ponytail.mdc",
+      "src": "rules/coding/ponytail.mdc",
+      "sha256": "281a7fb0bcc147440e05e5213066bf3ab363a9c858ff798fb88cc5b646f54735"
+    },
+    {
+      "dest": ".cursor/rules/pr-ready-for-review.mdc",
+      "src": "rules/core/pr-ready-for-review.mdc",
+      "sha256": "894f6687a91f3ec24e087f6fd12645bb1c9ccf3f034a457ca69f2beab4f393af"
+    },
+    {
+      "dest": ".cursor/rules/repo-conventions.mdc",
+      "src": "rules/core/repo-conventions.mdc",
+      "sha256": "71d1b8e75671591739c1a84d65b4bf63e3b454080b0e9ab7314dc5a6d7b3374d"
+    },
+    {
+      "dest": ".cursor/rules/typescript-code-style.mdc",
+      "src": "rules/typescript/typescript-code-style.mdc",
+      "sha256": "97f5d2bcb250e951bb3843f436c82af5834522a5e176af9656046a95abffa840"
+    },
+    {
+      "dest": ".mcp.json",
+      "src": "__generated__/claude/mcp.json",
+      "sha256": "e14b3dc073dddf751dce5ea5fb3007be05cf12629678485a9868d33c63e39c25"
+    }
+  ],
+  "managed_blocks": [
+    {
+      "file": "AGENTS.md",
+      "block": "agent-rules",
+      "sha256": "9d1c470e13daac8281002a4be9c5aef9038ec49420d59f7da90bdbbbe4b655b0"
+    },
+    {
+      "file": "CLAUDE.md",
+      "block": "agents-import",
+      "sha256": "5dd8dfb31b3dc92efb1b60e83e51460fb31b4e834b670b57f7397327d0eaded8"
+    }
+  ]
+}
