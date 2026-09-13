@@ -64,7 +64,7 @@ A read is counted when:
 - you invoke `/skill:<name>` in the TUI
 - a subagent autoloads a skill
 
-Failed reads and `skill://<name>/some-asset` are ignored.
+Each counted read also writes an **info** line to omp's file log (`~/.omp/logs/`) with the skill name, invocation kind, provider, model, repo, session, and whether it was a subagent. Failed reads and `skill://<name>/some-asset` are ignored.
 
 ## Labels
 

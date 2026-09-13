@@ -135,6 +135,18 @@ function autoloads(ctx: ExtensionContext): Array<{ id: string; name: string }> {
   return out;
 }
 
+/** Info-level file log for a counted skill-body hydration. */
+export function skillReadLogLine(attributes: Attributes): string {
+  const name = String(attributes["omp.skill.name"] ?? "unknown");
+  const kind = String(attributes["omp.skill.invocation_kind"] ?? "unknown");
+  const provider = String(attributes["omp.skill.provider"] ?? "unknown");
+  const model = String(attributes["gen_ai.request.model"] ?? "unknown");
+  const repo = String(attributes["vcs.repository.name"] ?? "none");
+  const session = String(attributes["omp.session.id"] ?? "unknown");
+  const subagent = attributes["omp.subagent"] === true;
+  return `[${SCOPE}] skill read name=${name} invocation_kind=${kind} provider=${provider} model=${model} repo=${repo} session=${session} subagent=${subagent}`;
+}
+
 function apply(
   inst: {
     skill_reads: { add: (v: number, a?: Attributes) => void };
@@ -198,7 +210,12 @@ export default function skillTelemetry(pi: ExtensionAPI, options?: SkillTelemetr
   };
 
   const run = (event: TelemetryEvent, ctx: ExtensionContext) => {
-    apply(meters(), decide(state, event, attrs(ctx)));
+    const rows = decide(state, event, attrs(ctx));
+    apply(meters(), rows);
+    for (const row of rows) {
+      if (row.instrument !== "omp.skill.skill_reads") continue;
+      pi.logger.info(skillReadLogLine(row.attributes), { ...row.attributes });
+    }
   };
 
   const swallow = (label: string, fn: () => void) => {

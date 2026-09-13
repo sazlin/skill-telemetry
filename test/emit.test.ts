@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import skillTelemetry, { createState, decide, type CtxAttrs } from "../src/main.ts";
+import skillTelemetry, { createState, decide, skillReadLogLine, type CtxAttrs } from "../src/main.ts";
 
 const attrs: CtxAttrs = {
   "omp.session.id": "s1",
@@ -106,6 +106,23 @@ describe("decide", () => {
     assert.equal(n, 0);
   });
 
+  test("skillReadLogLine puts name and context in the message", () => {
+    const line = skillReadLogLine({
+      ...attrs,
+      "omp.skill.name": "telemetry-probe",
+      "omp.skill.invocation_kind": "model",
+      "omp.skill.provider": "native",
+    });
+    assert.match(line, /skill read/);
+    assert.match(line, /name=telemetry-probe/);
+    assert.match(line, /invocation_kind=model/);
+    assert.match(line, /provider=native/);
+    assert.match(line, /model=test-model/);
+    assert.match(line, /repo=skill-telemetry/);
+    assert.match(line, /session=s1/);
+    assert.match(line, /subagent=false/);
+  });
+
   test("injectable meter records discovered on session_start", async () => {
     const prev = process.env.SKILL_TELEMETRY_ENABLED;
     process.env.SKILL_TELEMETRY_ENABLED = "true";
@@ -117,7 +134,7 @@ describe("decide", () => {
         on(event: string, handler: (event: unknown, ctx: unknown) => unknown) {
           handlers.set(event, handler);
         },
-        logger: { debug() {} },
+        logger: { debug() {}, info() {} },
         getActiveTools: () => ["read"],
         getCommands: () => [],
         pi: {
@@ -145,5 +162,58 @@ describe("decide", () => {
     else process.env.SKILL_TELEMETRY_ENABLED = prev;
     assert.equal(adds.length, 1);
     assert.equal(adds[0]?.[0], 1);
+  });
+
+  test("skill body read emits an info log; asset read does not", async () => {
+    const prev = process.env.SKILL_TELEMETRY_ENABLED;
+    process.env.SKILL_TELEMETRY_ENABLED = "true";
+    const infos: Array<{ message: string; context: unknown }> = [];
+    const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
+    const ctx = {
+      cwd: "/tmp",
+      model: { id: "test-model" },
+      models: { current: () => ({ id: "test-model" }) },
+      getSystemPrompt: () => [],
+      sessionManager: { getSessionId: () => "s1", getBranch: () => [] },
+    };
+    skillTelemetry(
+      {
+        on(event: string, handler: (event: unknown, ctx: unknown) => unknown) {
+          handlers.set(event, handler);
+        },
+        logger: {
+          debug() {},
+          info(message: string, context?: unknown) {
+            infos.push({ message, context });
+          },
+        },
+        getActiveTools: () => ["read"],
+        getCommands: () => [],
+        pi: {
+          getActiveSkills: () => [{ name: "telemetry-probe", source: "native:user", _source: { provider: "native" } }],
+        },
+      } as never,
+      {
+        meter: {
+          createCounter: () => ({ add() {} }),
+          createUpDownCounter: () => ({ add() {} }),
+        } as never,
+      },
+    );
+    await handlers.get("session_start")?.({ type: "session_start" }, ctx);
+    await handlers.get("tool_result")?.(
+      { toolName: "read", input: { path: "skill://telemetry-probe" }, isError: false },
+      ctx,
+    );
+    await handlers.get("tool_result")?.(
+      { toolName: "read", input: { path: "skill://telemetry-probe/assets/example.txt" }, isError: false },
+      ctx,
+    );
+    if (prev === undefined) delete process.env.SKILL_TELEMETRY_ENABLED;
+    else process.env.SKILL_TELEMETRY_ENABLED = prev;
+    assert.equal(infos.length, 1);
+    assert.match(infos[0]?.message ?? "", /name=telemetry-probe/);
+    assert.match(infos[0]?.message ?? "", /invocation_kind=model/);
+    assert.equal((infos[0]?.context as { "omp.skill.name"?: string })["omp.skill.name"], "telemetry-probe");
   });
 });
