@@ -1,0 +1,5 @@
+source: https://github.com/sazlin/loadout
+ref: main
+loadouts:
+- typescript
+- github

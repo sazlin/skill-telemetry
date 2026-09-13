@@ -1,0 +1,20 @@
+---
+description: Never include Cursor as a git commit co-author.
+alwaysApply: true
+metadata:
+  loadout.managed: 'true'
+  loadout.source: rules/core/no-cursor-coauthor.mdc
+  loadout.sha: 9180c3a
+---
+
+# No Cursor co-author
+
+Never include Cursor as a co-author on any commit.
+
+- Do not add `Co-authored-by:` lines that name Cursor, Cursor Agent, or any
+  `@cursor.com` address (any capitalization).
+- Do not pass `--trailer` or use a commit template that inserts those lines.
+- If a tool, hook, or template inserts a Cursor co-author, strip it from the
+  message before committing. After commit, inspect `git log -1 --format=%B`
+  and amend to remove it before pushing.
+- Human co-authors the user requested are allowed. Cursor is not.

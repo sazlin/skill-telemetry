@@ -1,0 +1,56 @@
+---
+description: Author and import agents from agents/_agent_template.md. Applies only
+  when working on files under agents/.
+globs:
+- agents/*/*.md
+- agents/_agent_template.md
+metadata:
+  loadout.managed: 'true'
+  loadout.source: rules/agents/agent-authoring.mdc
+  loadout.sha: 9180c3a
+---
+
+# Agent authoring
+
+This rule applies only while creating or editing files under `agents/`.
+
+## New agents
+
+Copy `agents/_agent_template.md` to `agents/<name>/<name>.md` (no leading
+underscore). Fill every template section before merge. Do not invent a
+different heading set or omit the JSON output schema.
+
+Required headings, in this order:
+
+1. Charter
+2. I/O contract
+3. Definition of done
+4. Tools / privileges
+5. Anti-reward-hacking
+6. Blocked protocol
+7. Context acquisition
+8. Repo conventions
+9. Working style
+10. Agent-specific guidance
+11. Output schema
+
+Frontmatter must parse as an agent: `name` equals the file stem, `description`
+is non-empty and has no `<` / `>`, and only allowed keys are present
+(`name`, `description`, `model`, `readonly`, `is_background`, `tools`,
+`metadata`). Write `description` only as when-to-use and when-not-to-use
+signals for other agents (see `rules/agents/agent-descriptions.mdc`).
+
+## Imported agents
+
+Adapt every imported or third-party agent to this template before merge.
+Keep specialty instructions under **Agent-specific guidance**. Rewrite
+frontmatter, I/O contract, anti-reward-hacking, blocked protocol, and
+output schema so they match the template. Do not vendor a foreign heading
+layout or a prose-only agent.
+
+## Not an agent
+
+Files whose names start with `_` (including `_agent_template.md`) are
+templates or notes. Markdown under `evals/` is eval infrastructure.
+Do not add either to a loadout `agents:` list, do not sync them to
+`.claude/agents/`, and do not treat them as dispatchable subagents.

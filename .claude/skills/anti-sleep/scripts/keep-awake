@@ -1,0 +1,269 @@
+#!/usr/bin/env bash
+# Hold a session-long macOS idle-sleep assertion for agent work.
+# Usage: keep-awake start [seconds] | status | stop | renew [seconds]
+set -euo pipefail
+
+DEFAULT_TIMEOUT=28800
+umask 077
+STATE_DIR="${HOME}/Library/Caches/loadout-anti-sleep"
+PIDFILE="${STATE_DIR}/keep-awake.pid"
+LOCKDIR="${PIDFILE}.lock"
+
+usage() {
+  echo "usage: keep-awake start [seconds] | status | stop | renew [seconds]" >&2
+  exit 2
+}
+
+is_darwin() {
+  [[ "$(uname -s)" == "Darwin" ]]
+}
+
+require_timeout() {
+  local timeout="$1"
+  if [[ ! "$timeout" =~ ^[1-9][0-9]*$ ]]; then
+    echo "anti-sleep: timeout must be a positive integer of seconds, got: $timeout" >&2
+    exit 2
+  fi
+}
+
+ensure_state_dir() {
+  if [[ -z "${HOME:-}" ]]; then
+    echo "anti-sleep: HOME is not set" >&2
+    exit 1
+  fi
+  mkdir -p "$STATE_DIR"
+  chmod 700 "$STATE_DIR"
+}
+
+is_positive_pid() {
+  [[ "$1" =~ ^[1-9][0-9]*$ ]]
+}
+
+is_keeper_pid() {
+  # Live PID plus " -i " in args so unrelated caffeinate -w/-d is rejected.
+  # comm==caffeinate matches macOS; args *caffeinate* is for PATH stubs whose
+  # comm is the interpreter (python3 shebang in Linux CI). comm= is space-padded
+  # on some ps; args= is empty on some BSD ps, so fall back to command=.
+  local pid="$1"
+  local comm args padded
+  is_positive_pid "$pid" || return 1
+  kill -0 -- "$pid" 2>/dev/null || return 1
+  comm="$(ps -p "$pid" -o comm= 2>/dev/null || true)"
+  comm="${comm//[$' \t']/}"
+  args="$(ps -ww -p "$pid" -o args= 2>/dev/null || true)"
+  if [[ -z "$args" ]]; then
+    args="$(ps -ww -p "$pid" -o command= 2>/dev/null || true)"
+  fi
+  padded=" ${args} "
+  case "$padded" in
+    *" -i "*) ;;
+    *) return 1 ;;
+  esac
+  if [[ "$comm" == "caffeinate" ]]; then
+    return 0
+  fi
+  case "$args" in
+    *caffeinate*) return 0 ;;
+  esac
+  return 1
+}
+
+running_pid() {
+  local pid
+  if [[ -L "$PIDFILE" ]]; then
+    rm -f "$PIDFILE"
+    return 1
+  fi
+  if [[ ! -f "$PIDFILE" ]]; then
+    return 1
+  fi
+  pid="$(tr -d '[:space:]' <"$PIDFILE")"
+  if is_keeper_pid "$pid"; then
+    printf '%s\n' "$pid"
+    return 0
+  fi
+  rm -f "$PIDFILE"
+  return 1
+}
+
+write_pidfile() {
+  local pid="$1"
+  # Unlink an existing symlink so we never write through it.
+  if [[ -L "$PIDFILE" ]]; then
+    rm -f "$PIDFILE"
+  fi
+  # If a symlink is still there, refuse (do not follow it).
+  if [[ -L "$PIDFILE" ]]; then
+    echo "anti-sleep: pidfile is a symlink; refusing to write" >&2
+    return 1
+  fi
+  # Remove a leftover regular pidfile so noclobber can create a new regular file.
+  rm -f "$PIDFILE"
+  (
+    set -o noclobber
+    printf '%s\n' "$pid" >"$PIDFILE"
+  )
+}
+
+lock_holder_alive() {
+  local holder
+  [[ -f "$LOCKDIR/pid" ]] || return 1
+  holder="$(tr -d '[:space:]' <"$LOCKDIR/pid" 2>/dev/null || true)"
+  is_positive_pid "$holder" || return 1
+  kill -0 -- "$holder" 2>/dev/null
+}
+
+lockdir_age_seconds() {
+  local now mtime
+  now="$(date +%s)"
+  mtime="$(stat -c %Y "$LOCKDIR" 2>/dev/null || stat -f %m "$LOCKDIR" 2>/dev/null || echo "$now")"
+  echo $((now - mtime))
+}
+
+reclaim_stale_lock() {
+  rm -f "$LOCKDIR/pid" 2>/dev/null || true
+  rmdir "$LOCKDIR" 2>/dev/null || true
+}
+
+acquire_lock() {
+  local n=0
+  ensure_state_dir
+  while ! mkdir "$LOCKDIR" 2>/dev/null; do
+    n=$((n + 1))
+    if lock_holder_alive; then
+      if [[ "$n" -ge 100 ]]; then
+        echo "anti-sleep: timed out waiting for lock" >&2
+        exit 1
+      fi
+      sleep 0.05
+      continue
+    fi
+    # Dead holder, empty lockdir older than the 5s wait, or last attempt.
+    if [[ -f "$LOCKDIR/pid" ]] || [[ "$(lockdir_age_seconds)" -ge 5 ]] || [[ "$n" -ge 100 ]]; then
+      reclaim_stale_lock
+    fi
+    if [[ "$n" -ge 100 ]]; then
+      if mkdir "$LOCKDIR" 2>/dev/null; then
+        break
+      fi
+      echo "anti-sleep: timed out waiting for lock" >&2
+      exit 1
+    fi
+    if [[ -d "$LOCKDIR" ]]; then
+      sleep 0.05
+    fi
+  done
+  printf '%s\n' "$$" >"$LOCKDIR/pid"
+  trap release_lock EXIT
+  trap 'exit 1' INT TERM HUP
+}
+
+release_lock() {
+  local holder=""
+  holder="$(tr -d '[:space:]' <"$LOCKDIR/pid" 2>/dev/null || true)"
+  if [[ "$holder" != "$$" ]]; then
+    return 0
+  fi
+  rm -f "$LOCKDIR/pid" 2>/dev/null || true
+  rmdir "$LOCKDIR" 2>/dev/null || true
+}
+
+launch() {
+  local timeout="$1"
+  local pid
+  require_timeout "$timeout"
+  if ! command -v caffeinate >/dev/null; then
+    echo "anti-sleep: caffeinate not found on PATH" >&2
+    exit 1
+  fi
+  nohup caffeinate -i -t "$timeout" >/dev/null 2>&1 &
+  pid=$!
+  if ! write_pidfile "$pid"; then
+    kill -- "$pid" 2>/dev/null || true
+    return 1
+  fi
+  disown "$pid" 2>/dev/null || true
+  printf '%s\n' "$pid"
+}
+
+cmd_start() {
+  local timeout="${1:-$DEFAULT_TIMEOUT}"
+  local pid
+  acquire_lock
+  if pid="$(running_pid)"; then
+    echo "anti-sleep: already running pid=$pid"
+    return 0
+  fi
+  if ! pid="$(launch "$timeout")"; then
+    return 1
+  fi
+  echo "anti-sleep: started pid=$pid timeout=${timeout}s (PreventUserIdleSystemSleep)"
+  echo "anti-sleep: verify with: pmset -g assertions"
+}
+
+cmd_status() {
+  local pid=""
+  acquire_lock
+  pid="$(running_pid || true)"
+  release_lock
+  trap - EXIT INT TERM HUP
+  if [[ -n "$pid" ]]; then
+    echo "anti-sleep: running pid=$pid"
+    if command -v pmset >/dev/null; then
+      pmset -g assertions || true
+    fi
+    return 0
+  fi
+  echo "anti-sleep: not running" >&2
+  exit 1
+}
+
+cmd_stop() {
+  local pid
+  acquire_lock
+  if pid="$(running_pid)"; then
+    kill -- "$pid" 2>/dev/null || true
+    rm -f "$PIDFILE"
+    echo "anti-sleep: stopped pid=$pid"
+    return 0
+  fi
+  rm -f "$PIDFILE"
+  echo "anti-sleep: not running"
+}
+
+cmd_renew() {
+  local timeout="${1:-$DEFAULT_TIMEOUT}"
+  local old new
+  acquire_lock
+  old="$(running_pid || true)"
+  if ! new="$(launch "$timeout")"; then
+    return 1
+  fi
+  if [[ -n "$old" && "$old" != "$new" ]] && is_keeper_pid "$old"; then
+    kill -- "$old" 2>/dev/null || true
+  fi
+  echo "anti-sleep: renewed pid=$new timeout=${timeout}s (PreventUserIdleSystemSleep)"
+}
+
+[[ $# -ge 1 ]] || usage
+command="$1"
+shift || true
+
+# Unknown verbs must be rejected before the non-macOS no-op so they still
+# exit 2 on Linux instead of printing the Darwin skip and exiting 0.
+case "$command" in
+  start | status | stop | renew) ;;
+  *) usage ;;
+esac
+
+if ! is_darwin; then
+  echo "anti-sleep: not macOS ($(uname -s)); no-op"
+  exit 0
+fi
+
+case "$command" in
+  start) cmd_start "${1:-}" ;;
+  status) cmd_status ;;
+  stop) cmd_stop ;;
+  renew) cmd_renew "${1:-}" ;;
+esac

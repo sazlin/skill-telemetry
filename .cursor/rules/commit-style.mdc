@@ -1,0 +1,16 @@
+---
+description: Write focused, reviewable commits with clear intent.
+alwaysApply: true
+metadata:
+  loadout.managed: 'true'
+  loadout.source: rules/core/commit-style.mdc
+  loadout.sha: 9180c3a
+---
+
+# Commit style
+
+- Keep each commit to one cohesive change that can be reviewed and reverted independently.
+- Use a concise conventional-commit subject: `type: imperative summary`.
+- Explain the user-facing reason in the body when the subject alone is insufficient.
+- Do not mix formatting-only churn, unrelated refactors, or generated files with functional changes.
+- Before committing, inspect the staged diff and run the relevant checks.

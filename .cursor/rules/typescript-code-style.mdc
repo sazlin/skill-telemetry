@@ -1,0 +1,136 @@
+---
+description: Write simple, typed, maintainable TypeScript that a reviewer can read
+  in one pass.
+globs:
+- '**/*.ts'
+- '**/*.tsx'
+- '**/*.mts'
+- '**/*.cts'
+metadata:
+  loadout.managed: 'true'
+  loadout.source: rules/typescript/typescript-code-style.mdc
+  loadout.sha: 9180c3a
+---
+
+# TypeScript code style
+
+Optimize every change for the next reader. Prefer the boring solution that is obviously correct over the clever one that needs explaining.
+
+## Default posture
+
+- Solve only the problem in front of you. Do not add configuration, hooks, or extension points for hypothetical future needs.
+- Prefer plain functions and small modules. Introduce a class only for real state or a required framework contract.
+- Reach for the standard library and existing repo helpers before a new dependency or abstraction.
+- Duplicate a few lines rather than abstract over two dissimilar call sites. Wait for the third real case.
+- Delete dead code, unused exports, and commented-out blocks instead of leaving them.
+
+## Structure and flow
+
+- Keep functions short and single-purpose: under 40 lines and doing one thing the name fully describes.
+- Return early with guard clauses; do not nest the happy path.
+- Keep nesting to three levels or less. Extract a named helper when you need a fourth.
+- Prefer pure functions that take inputs and return values. Isolate I/O, network, and mutable state at the edges.
+- Never mutate an argument the caller still owns unless the name makes that explicit (`sortInPlace`, `append`).
+- Put all imports at the top of the module. No mid-file imports and no dynamic `import()` inside functions unless required to break a documented circular dependency.
+- Prefer `import type { … }` for type-only imports.
+
+```typescript
+// Prefer
+type Status =
+  | { kind: "ok"; value: number }
+  | { kind: "err"; message: string }
+  | { kind: "pending" };
+
+export function formatStatus(status: Status): string {
+  switch (status.kind) {
+    case "ok":
+      return String(status.value);
+    case "err":
+      return status.message;
+    case "pending":
+      return "pending";
+    default: {
+      const _exhaustive: never = status;
+      return _exhaustive;
+    }
+  }
+}
+
+// Avoid
+export function formatStatus(input: any): string {
+  const s = input as { kind?: string; value?: number; message?: string };
+  if (s.kind === "ok") {
+    if (s.value != null) return String(s.value);
+    else return "";
+  } else {
+    return s.message ?? "unknown";
+  }
+}
+```
+
+## Naming
+
+- Use `camelCase` for values and functions, `PascalCase` for types/classes/components, `SCREAMING_SNAKE_CASE` for true constants.
+- Name after intent and domain meaning: `retryCount`, not `num`; `activeUsers`, not `list2`.
+- Use verb phrases for functions (`loadConfig`, `isExpired`) and nouns for values and types.
+- Avoid inventing abbreviations; reserve one-letter names for conventional tight scopes (`i`, `x`, `_`).
+
+## Types
+
+- Annotate exported function parameters and return types. Let locals infer when the type is obvious.
+- Prefer `unknown` over `any`. Narrow with `typeof`, `in`, discriminated unions, or type guards — not `as` casts.
+- Avoid `any`, `as any`, `as unknown as T`, `@ts-ignore`, and bare `@ts-expect-error`. If you must suppress, use `@ts-expect-error` with a one-line reason.
+- Model variants with discriminated unions (`kind` / `type` fields). Prefer string-literal unions over most `enum`s.
+- Use `readonly` / `Readonly<T>` / `ReadonlyArray<T>` for data that should not change.
+- Prefer `interface` for object shapes that may be extended; prefer `type` for unions, intersections, and mapped types.
+- Never use a mutable shared default: do not write `config: Config = DEFAULT_CONFIG` when callers can mutate it. Use `config?: Config` and fall back inside, or freeze the default.
+
+## Exhaustiveness
+
+- In `switch` statements over discriminated unions or enums, handle every variant and end with a `never` check in `default` so new variants fail at compile time.
+- Do not use a catch-all `default` that silently returns a fallback for union cases that should be exhaustive.
+
+## Errors and async
+
+- Validate inputs and fail fast with a specific `Error` (or domain error class) whose message names the offending value.
+- Required CLI positionals are a trust boundary. Wrong argc: usage on stderr and a non-zero exit, not `process.argv[2]` while extras succeed. Do not run parser self-checks from `main()` on every invocation; put them in a sibling file or behind an explicit flag.
+- CLI URL arguments are a trust boundary. Accept only `http:` and `https:` unless the spec asks for more. Reject `file:`, `ftp:`, and other schemes before `fetch`. Use `redirect: 'manual'` (or validate each redirect target's scheme) so a post-redirect `file:` URL cannot bypass the initial http(s) check. Set an explicit fetch deadline (e.g. `AbortSignal.timeout(ms)`) so a stalled origin cannot hang the process. Cap the response body at 5 MiB (5_242_880 bytes) before buffering for strip; reject larger bodies instead of loading unbounded HTML.
+- If the file is a CLI, invoke `main` whenever it is the process entry. Do not require the source filename to match `scrape.ts` (or any other literal). A rename, `npx tsx path/to/file.ts`, or a copy under a test name must still run.
+- Prefer throwing or returning a typed `Result` over sentinel `null`/`undefined` for unexpected failure. Reserve `null` for genuinely absent optional values.
+- Keep `try` blocks small. Catch the narrowest failure you can handle; never swallow with an empty `catch`.
+- Use `async`/`await` instead of raw `Promise.then` chains. Do not mix styles in one flow.
+- Never log or embed secrets, tokens, or credentials.
+- Parsed request bodies are a trust boundary. Malformed JSON is 400 with the API's error body, not an unhandled 500 from `express.json()` / the body parser. Add one error-handling middleware for `SyntaxError`; do not wrap every route in try/catch/`next` for this (Express 5 already forwards async rejections). Use one 400 JSON shape for validation and malformed JSON.
+- When Zod (or equivalent) validates JSON strings the client sent, use `.trim().min(1)` (or trim then nonempty) on required text. `z.string().min(1)` still accepts `'   '`.
+- Fields named in the spec belong on the create/update schema. Do not YAGNI `completed` off create because title is the only required key. Extra unknown keys may be stripped; a named field with the wrong type is 400, not silently ignored.
+
+## HTML to text
+
+- Decode numeric entities (`&#N;`, `&#xH;`) and this named set: `amp`, `lt`, `gt`, `quot`, `apos`, `nbsp`, `copy`, `mdash`, `hellip`. Do not leave `&copy;` in stdout. Do not vendor a full entity table or a DOM package for that.
+- Honor the requested document region: body text means descendants of `<body>` when present; do not print `<title>` / `<head>` as a fallback.
+- Do not emit text from drop-tags (`script`, `style`, `iframe`, `noscript`, `svg`, `template`) even if they sit outside `<body>`.
+- Use a skip-depth tag walk for that drop, not match-until-close regex. The walk is linear in input size — do not load unbounded markup into memory.
+
+## Comments and docs
+
+- Comment only what the code cannot say: a non-obvious constraint, trade-off, or workaround and its reason.
+- Do not narrate the next line or leave change-log comments (`// fixed bug`, `// new code`).
+- Exported public APIs that are non-obvious get a short JSDoc stating what they do and what they throw or return.
+
+## Tests
+
+- Cover observable behavior, edge cases, and the error paths you raise.
+- One behavior per test, with a name that states the expectation.
+- Arrange-act-assert; assert on outputs and side effects, not private internals.
+- Keep unit tests fast and deterministic; mock network, filesystem, and time at the boundaries.
+
+## Tooling
+
+- Match the repository's formatter and linter (typically Prettier/ESLint, Biome, or oxlint) instead of hand-formatting.
+- If `package.json` has `"type": "module"` and the app runs on Node (Express, Fastify, Prisma, not Vite/webpack), set `compilerOptions.module` and `moduleResolution` to `NodeNext` or `Node16`. Do not use `moduleResolution: "bundler"` for a Node server.
+- Keep `strict` TypeScript options on. Do not weaken `tsconfig` to silence errors.
+- Run the type checker, formatter, linter, and relevant tests before handing work off.
+
+## Avoid
+
+`any`-driven designs, non-exhaustive switches, inline or mid-file imports, deep `Partial`/`as` cast chains, mutable shared defaults, mutating caller-owned inputs, nested ternaries that pack several ideas into one expression, single-use class hierarchies, and `Object.assign` / spread soup that hides required fields. Each one trades a few keystrokes for real reader effort.

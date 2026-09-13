@@ -1,0 +1,537 @@
+#!/usr/bin/env bash
+# SessionStart hook for the loadout-vendored ponytail skill.
+# Adapted from DietrichGebert/ponytail hooks/ponytail-activate.js.
+# Missing, failing, or hung python3 fail-opens with empty context (exit 0).
+
+set -euo pipefail
+
+MAX_SKILL_BYTES=65536
+IO_DEADLINE_SECS=2
+# GNU timeout(1) status; SIGTERM/SIGKILL wait statuses (143/137) map to this.
+TIMEOUT_EXIT=124
+KILL_AFTER_SECS=1
+# POLL_INTERVAL_SECS and POLLS_PER_SEC must stay in lockstep.
+POLL_INTERVAL_SECS=0.1
+POLLS_PER_SEC=10
+
+# Script lives at <project>/.cursor/hooks/ponytail-activate/ponytail-activate
+# (loadout vendors each hook into hooks/<name>/; three levels up is project root).
+HOOK_PID=$$
+HARNESS=claude
+if [ "${1:-}" = "cursor" ]; then
+    HARNESS=cursor
+fi
+
+emit_empty_payload() {
+    if [ "$HARNESS" = "cursor" ]; then
+        printf '%s\n' '{"additional_context":""}'
+    else
+        printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":""}}'
+    fi
+}
+
+handle_fail_open() {
+    # Must run in the top-level process, not inside $(); JSON would be swallowed.
+    trap - ERR USR1
+    emit_empty_payload
+    exit 0
+}
+
+signal_fail_open() {
+    # USR1 the top-level process so a failing command substitution cannot
+    # swallow empty JSON ($$ is the parent even inside $() on bash 3.2).
+    kill -USR1 "$HOOK_PID" 2>/dev/null || true
+    exit 0
+}
+
+trap handle_fail_open USR1
+trap signal_fail_open ERR
+
+if ! command -v python3 >/dev/null 2>&1; then
+    signal_fail_open
+fi
+
+map_deadline_rc() {
+    local rc="$1"
+    if [ "$rc" -eq 143 ] || [ "$rc" -eq 137 ]; then
+        printf '%s' "$TIMEOUT_EXIT"
+    else
+        printf '%s' "$rc"
+    fi
+}
+
+signal_deadline_pid() {
+    local sig="$1"
+    local pid="$2"
+    local use_pgroup="$3"
+    if [ "$use_pgroup" -eq 1 ]; then
+        kill -"$sig" -- "-$pid" 2>/dev/null || true
+    else
+        kill -"$sig" "$pid" 2>/dev/null || true
+    fi
+}
+
+# kill -0 is true for zombies until wait; treat Z as done so success is fast.
+pid_is_zombie() {
+    local check_pid="$1" proc_stat after_comm state
+    # /proc/<pid>/stat is `pid (comm) state ...`. comm may contain spaces and
+    # `)`; state is the first token after the last `)`. Do not awk field 3.
+    # Missing /proc (macOS) falls through to ps; kill -0 stays the live check.
+    if [ -r "/proc/${check_pid}/stat" ]; then
+        proc_stat="$(cat "/proc/${check_pid}/stat" 2>/dev/null || true)"
+        after_comm="${proc_stat##*)}"
+        after_comm="${after_comm#"${after_comm%%[![:space:]]*}"}"
+        state="${after_comm%% *}"
+        [ "$state" = "Z" ]
+        return
+    fi
+    state="$(ps -o state= -p "$check_pid" 2>/dev/null || true)"
+    state="${state#"${state%%[![:space:]]*}"}"
+    case "$state" in
+        Z*) return 0 ;;
+    esac
+    return 1
+}
+
+deadline_pid_live() {
+    local check_pid="$1"
+    kill -0 "$check_pid" 2>/dev/null || return 1
+    if pid_is_zombie "$check_pid"; then
+        return 1
+    fi
+    return 0
+}
+
+# TERM at IO_DEADLINE_SECS (fallback only), then KILL. If the pid is still
+# running (D-state), return TIMEOUT_EXIT without waiting so the hook can
+# fail-open and orphan it. early_term=0 for GNU timeout: do not TERM the
+# timeout binary at IO_DEADLINE (it TERMs its child); KILL it after
+# IO+KILL_AFTER if it has not exited.
+reap_deadline_pid() {
+    local pid="$1"
+    local use_pgroup="$2"
+    local early_term="$3"
+    local rc=0
+    # Redirect so a leftover grandchild cannot hold the $() pipe open.
+    (
+        if [ "$early_term" -eq 1 ]; then
+            sleep "$IO_DEADLINE_SECS"
+            signal_deadline_pid TERM "$pid" "$use_pgroup"
+            sleep "$KILL_AFTER_SECS"
+            signal_deadline_pid KILL "$pid" "$use_pgroup"
+        else
+            sleep $((IO_DEADLINE_SECS + KILL_AFTER_SECS))
+            signal_deadline_pid KILL "$pid" "$use_pgroup"
+        fi
+    ) >/dev/null 2>&1 &
+    local watcher=$!
+    local elapsed_ticks=0
+    local limit_ticks=$(((IO_DEADLINE_SECS + KILL_AFTER_SECS + 1) * POLLS_PER_SEC))
+    # kill -0 sees D-state and pipeline-hidden jobs; jobs -r | grep can miss.
+    while deadline_pid_live "$pid"; do
+        if [ "$elapsed_ticks" -ge "$limit_ticks" ]; then
+            kill "$watcher" 2>/dev/null || true
+            wait "$watcher" 2>/dev/null || true
+            signal_deadline_pid KILL "$pid" "$use_pgroup"
+            return "$TIMEOUT_EXIT"
+        fi
+        sleep "$POLL_INTERVAL_SECS"
+        elapsed_ticks=$((elapsed_ticks + 1))
+    done
+    wait "$pid" || rc=$?
+    kill "$watcher" 2>/dev/null || true
+    wait "$watcher" 2>/dev/null || true
+    rc="$(map_deadline_rc "$rc")"
+    return "$rc"
+}
+
+# stdout goes to a file so backgrounded timeout/python3 cannot keep $() blocked.
+run_deadline_capture() {
+    local stdin_file="$1"
+    shift
+    local rc=0 pid use_pgroup=0 outfile early_term=1
+    outfile="$(mktemp)"
+    if [ -z "$stdin_file" ]; then
+        stdin_file="/dev/null"
+    fi
+    if command -v timeout >/dev/null 2>&1; then
+        timeout --kill-after="${KILL_AFTER_SECS}s" "$IO_DEADLINE_SECS" "$@" <"$stdin_file" >"$outfile" &
+        pid=$!
+        early_term=0
+        reap_deadline_pid "$pid" 0 "$early_term" || rc=$?
+    elif command -v setsid >/dev/null 2>&1; then
+        use_pgroup=1
+        setsid "$@" <"$stdin_file" >"$outfile" &
+        pid=$!
+        reap_deadline_pid "$pid" "$use_pgroup" "$early_term" || rc=$?
+    else
+        "$@" <"$stdin_file" >"$outfile" &
+        pid=$!
+        reap_deadline_pid "$pid" 0 "$early_term" || rc=$?
+    fi
+    if [ "$rc" -eq 0 ]; then
+        cat "$outfile"
+    fi
+    rm -f "$outfile"
+    return "$rc"
+}
+
+run_with_deadline() {
+    run_deadline_capture "" "$@"
+}
+
+run_with_deadline_stdin() {
+    local stdin_text="$1"
+    shift
+    local stdin_file rc=0
+    stdin_file="$(mktemp)"
+    printf '%s' "$stdin_text" >"$stdin_file"
+    run_deadline_capture "$stdin_file" "$@" || rc=$?
+    rm -f "$stdin_file"
+    return "$rc"
+}
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+
+RUNTIME_MODES=(off lite full ultra)
+
+emit_json_payload() {
+    local harness="$1"
+    local context="$2"
+    local payload rc script
+    if [ "$harness" = "cursor" ]; then
+        script='import json, sys; print(json.dumps({"additional_context": sys.stdin.read()}))'
+    else
+        script='
+import json
+import sys
+
+context = sys.stdin.read()
+print(
+    json.dumps(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "SessionStart",
+                "additionalContext": context,
+            }
+        }
+    )
+)
+'
+    fi
+    rc=0
+    payload="$(run_with_deadline_stdin "$context" python3 -c "$script")" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        signal_fail_open
+    fi
+    printf '%s\n' "$payload"
+}
+
+is_runtime_mode() {
+    local candidate mode
+    candidate="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+    for mode in "${RUNTIME_MODES[@]}"; do
+        if [ "$candidate" = "$mode" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+normalize_mode() {
+    local candidate
+    candidate="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+    if is_runtime_mode "$candidate"; then
+        printf '%s' "$candidate"
+        return 0
+    fi
+    return 1
+}
+
+get_config_path() {
+    if [ -n "${XDG_CONFIG_HOME:-}" ]; then
+        printf '%s/ponytail/config.json' "${XDG_CONFIG_HOME}"
+        return 0
+    fi
+    case "$(uname -s 2>/dev/null || echo Linux)" in
+        MINGW* | MSYS* | CYGWIN* | Windows*)
+            if [ -n "${APPDATA:-}" ]; then
+                printf '%s/ponytail/config.json' "${APPDATA}"
+            else
+                printf '%s/AppData/Roaming/ponytail/config.json' "${HOME}"
+            fi
+            ;;
+        *)
+            printf '%s/.config/ponytail/config.json' "${HOME}"
+            ;;
+    esac
+}
+
+read_config_default_mode() {
+    local config_path mode
+    config_path="$(get_config_path)"
+    if [ ! -f "$config_path" ]; then
+        return 1
+    fi
+    # Hung config grep falls back to default mode instead of an empty payload.
+    mode="$(
+        run_with_deadline grep -Eo '"defaultMode"[[:space:]]*:[[:space:]]*"(off|lite|full|ultra)"' "$config_path" 2>/dev/null \
+            | sed -E 's/.*"defaultMode"[[:space:]]*:[[:space:]]*"(off|lite|full|ultra)".*/\1/' \
+            | head -1
+    )" || true
+    if [ -n "$mode" ] && normalize_mode "$mode" >/dev/null; then
+        printf '%s' "$mode"
+        return 0
+    fi
+    return 1
+}
+
+get_default_mode() {
+    if [ -n "${PONYTAIL_DEFAULT_MODE:-}" ]; then
+        if mode="$(normalize_mode "${PONYTAIL_DEFAULT_MODE}")"; then
+            printf '%s' "$mode"
+            return 0
+        fi
+        # Non-empty but invalid env overrides config; fall back to full.
+        printf '%s' "full"
+        return 0
+    fi
+    if mode="$(read_config_default_mode)"; then
+        printf '%s' "$mode"
+        return 0
+    fi
+    printf '%s' "full"
+}
+
+resolve_skills_dir() {
+    local manifest line parsed
+    manifest="${PROJECT_ROOT}/.loadout.yaml"
+    if [ -f "$manifest" ]; then
+        line="$(grep -E '^skills_dir:[[:space:]]*' "$manifest" 2>/dev/null | head -1 || true)"
+        if [ -n "$line" ]; then
+            parsed="$(printf '%s' "${line#skills_dir:}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s/^["'\'']//; s/["'\'']$//')"
+            if [ -n "$parsed" ]; then
+                printf '%s' "$parsed"
+                return 0
+            fi
+        fi
+    fi
+    printf '%s' ".claude/skills"
+}
+
+resolve_skills_root() {
+    local skills_dir
+    skills_dir="$(resolve_skills_dir)"
+    if [[ "$skills_dir" == /* ]]; then
+        printf '%s' "${skills_dir}"
+    else
+        printf '%s/%s' "${PROJECT_ROOT}" "${skills_dir}"
+    fi
+}
+
+resolve_skill_path() {
+    local skills_root
+    skills_root="$(resolve_skills_root)"
+    printf '%s/ponytail/SKILL.md' "${skills_root}"
+}
+
+# Timeout (TIMEOUT_EXIT) fail-opens; other python3 failures return to the caller.
+canonical_path() {
+    local rc=0
+    run_with_deadline python3 -c '
+import os
+import sys
+
+path = sys.argv[1]
+try:
+    if not os.path.lexists(path):
+        sys.exit(1)
+    print(os.path.realpath(path))
+except OSError:
+    sys.exit(1)
+' "$1" 2>/dev/null || rc=$?
+    if [ "$rc" -eq "$TIMEOUT_EXIT" ]; then
+        signal_fail_open
+    fi
+    return "$rc"
+}
+
+# Timeout (TIMEOUT_EXIT) fail-opens; other awk failures return to the caller.
+strip_frontmatter() {
+    local rc=0
+    run_with_deadline awk '
+        BEGIN { in_frontmatter = 0; seen_open = 0 }
+        /^---[[:space:]]*$/ {
+            if (!seen_open) {
+                seen_open = 1
+                in_frontmatter = 1
+                next
+            }
+            if (in_frontmatter) {
+                in_frontmatter = 0
+                next
+            }
+        }
+        !in_frontmatter { print }
+    ' "$1" || rc=$?
+    if [ "$rc" -eq "$TIMEOUT_EXIT" ]; then
+        signal_fail_open
+    fi
+    return "$rc"
+}
+
+# validate_skill_file_path PATH
+# Return codes:
+#   0 — path exists, is not a symlink, and resolves under the skills root
+#   1 — path does not exist
+#   2 — path is a symlink (refuse to follow)
+#   3 — skills root missing/unresolvable, canonicalization failed, or path escapes skills root
+validate_skill_file_path() {
+    local skill_path="$1"
+    local skills_dir skills_root canonical_root canonical_skill rc
+
+    if [ ! -e "$skill_path" ]; then
+        return 1
+    fi
+    if [ -L "$skill_path" ]; then
+        return 2
+    fi
+
+    skills_root="$(resolve_skills_root)"
+    if [ ! -d "$skills_root" ]; then
+        return 3
+    fi
+    rc=0
+    canonical_root="$(canonical_path "$skills_root")" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        return 3
+    fi
+    rc=0
+    canonical_skill="$(canonical_path "$skill_path")" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        return 3
+    fi
+    case "$canonical_skill" in
+        "${canonical_root}"/*) return 0 ;;
+        *) return 3 ;;
+    esac
+}
+
+skill_file_byte_size() {
+    local size rc
+    rc=0
+    size="$(run_with_deadline python3 -c 'import os, sys; print(os.path.getsize(sys.argv[1]))' "$1" 2>/dev/null)" || rc=$?
+    if [ "$rc" -eq "$TIMEOUT_EXIT" ]; then
+        signal_fail_open
+    fi
+    if [ "$rc" -ne 0 ]; then
+        printf '%s' "0"
+        return 0
+    fi
+    printf '%s' "$size"
+}
+
+filter_skill_body_for_mode() {
+    local skill_file="$1"
+    local effective_mode="$2"
+    local line label normalized_label body rc
+
+    if ! is_runtime_mode "$effective_mode" || [ "$effective_mode" = "off" ]; then
+        effective_mode="full"
+    fi
+
+    rc=0
+    body="$(strip_frontmatter "$skill_file")" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        return "$rc"
+    fi
+
+    while IFS= read -r line || [ -n "$line" ]; do
+        if [[ "$line" =~ ^\|[[:space:]]*\*\*(.+)\*\*[[:space:]]*\| ]]; then
+            label="${BASH_REMATCH[1]}"
+            normalized_label="$(printf '%s' "$label" | tr '[:upper:]' '[:lower:]')"
+            case "$normalized_label" in
+                lite | full | ultra)
+                    if [ "$normalized_label" = "$effective_mode" ]; then
+                        printf '%s\n' "$line"
+                    fi
+                    continue
+                    ;;
+            esac
+        fi
+
+        if [[ "$line" =~ ^-[[:space:]]*([^:]+):[[:space:]]*\" ]]; then
+            label="${BASH_REMATCH[1]}"
+            normalized_label="$(printf '%s' "$label" | tr '[:upper:]' '[:lower:]' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+            case "$normalized_label" in
+                lite | full | ultra)
+                    if [ "$normalized_label" = "$effective_mode" ]; then
+                        printf '%s\n' "$line"
+                    fi
+                    continue
+                    ;;
+            esac
+        fi
+
+        printf '%s\n' "$line"
+    done <<< "$body"
+}
+
+load_skill_content() {
+    local skill_file="$1"
+    local effective_mode="$2"
+    local size content
+
+    if [ ! -r "$skill_file" ]; then
+        printf '%s' "Error: unable to read ponytail skill file"
+        return 0
+    fi
+
+    size="$(skill_file_byte_size "$skill_file")"
+    if [ "${size:-0}" -gt "$MAX_SKILL_BYTES" ]; then
+        printf '%s' "Error: ponytail skill file exceeds ${MAX_SKILL_BYTES} byte limit (${size} bytes)"
+        return 0
+    fi
+
+    if content="$(filter_skill_body_for_mode "$skill_file" "$effective_mode" 2>/dev/null)"; then
+        printf '%s' "$content"
+    else
+        printf '%s' "Error: unable to read ponytail skill file"
+    fi
+    return 0
+}
+
+emit_context() {
+    emit_json_payload "${HARNESS}" "$1"
+}
+
+SKILL_PATH="$(resolve_skill_path)"
+mode="$(get_default_mode)"
+
+if [ "$mode" = "off" ]; then
+    emit_context ""
+    exit 0
+fi
+
+if validate_skill_file_path "$SKILL_PATH"; then
+    skill_content="$(load_skill_content "$SKILL_PATH" "$mode")"
+elif [ -L "$SKILL_PATH" ]; then
+    skill_content="Error: ponytail skill path is a symlink; refusing to read"
+elif [ -e "$SKILL_PATH" ]; then
+    skill_content="Error: ponytail skill path is outside the skills directory"
+else
+    skills_dir="$(resolve_skills_dir)"
+    skill_content="Error: ponytail skill not found at ${skills_dir}/ponytail/SKILL.md"
+fi
+
+session_context="<EXTREMELY_IMPORTANT>
+PONYTAIL MODE ACTIVE — level: ${mode}
+
+You have ponytail. Follow the skill below on every coding task. Off only: \"stop ponytail\" / \"normal mode\". Switch: /ponytail lite|full|ultra.
+
+${skill_content}
+</EXTREMELY_IMPORTANT>"
+
+emit_context "$session_context"
+exit 0
