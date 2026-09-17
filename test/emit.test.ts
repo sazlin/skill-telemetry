@@ -3,10 +3,10 @@ import { describe, test } from "node:test";
 import skillTelemetry, { createState, decide, skillReadLogLine, type CtxAttrs } from "../src/main.ts";
 
 const attrs: CtxAttrs = {
-  "omp.session.id": "s1",
+  "agent.session.id": "s1",
   "gen_ai.request.model": "test-model",
   "vcs.repository.name": "skill-telemetry",
-  "omp.subagent": false,
+  "agent.is_subagent": false,
 };
 
 const providers = { "telemetry-probe": "native", "other-probe": "native" };
@@ -16,7 +16,7 @@ describe("decide", () => {
     const parent = createState();
     assert.deepEqual(
       decide(parent, { type: "session_start", skillCount: 2, offered: true, providers, subagent: false }, attrs),
-      [{ instrument: "omp.skill.discovered_on_session_start", value: 2, attributes: attrs }],
+      [{ instrument: "skill.discovered_on_session_start", value: 2, attributes: attrs }],
     );
 
     const child = createState();
@@ -24,7 +24,7 @@ describe("decide", () => {
       decide(
         child,
         { type: "session_start", skillCount: 2, offered: true, providers, subagent: true },
-        { ...attrs, "omp.subagent": true },
+        { ...attrs, "agent.is_subagent": true },
       ),
       [],
     );
@@ -35,9 +35,9 @@ describe("decide", () => {
     decide(state, { type: "session_start", skillCount: 2, offered: true, providers, subagent: false }, attrs);
     const rows = decide(state, { type: "turn_end" }, attrs);
     assert.equal(rows.length, 1);
-    assert.equal(rows[0]?.instrument, "omp.skill.turns");
+    assert.equal(rows[0]?.instrument, "skill.turns");
     assert.equal(rows[0]?.value, 1);
-    assert.equal(rows[0]?.attributes["omp.skill.name"], undefined);
+    assert.equal(rows[0]?.attributes["skill.name"], undefined);
   });
 
   test("turns do not increment when no skill was offered", () => {
@@ -51,13 +51,13 @@ describe("decide", () => {
     decide(state, { type: "session_start", skillCount: 1, offered: true, providers, subagent: false }, attrs);
     assert.deepEqual(decide(state, { type: "model_read", name: "telemetry-probe", asset: false, error: false }, attrs), [
       {
-        instrument: "omp.skill.skill_reads",
+        instrument: "skill.reads",
         value: 1,
         attributes: {
           ...attrs,
-          "omp.skill.name": "telemetry-probe",
-          "omp.skill.invocation_kind": "model",
-          "omp.skill.provider": "native",
+          "skill.name": "telemetry-probe",
+          "skill.invocation_kind": "model",
+          "skill.provider": "native",
         },
       },
     ]);
@@ -80,7 +80,7 @@ describe("decide", () => {
     decide(state, { type: "session_start", skillCount: 1, offered: true, providers, subagent: false }, attrs);
     decide(state, { type: "turn_start" }, attrs);
     const user = decide(state, { type: "user_skill", name: "telemetry-probe" }, attrs);
-    assert.equal(user[0]?.attributes["omp.skill.invocation_kind"], "user");
+    assert.equal(user[0]?.attributes["skill.invocation_kind"], "user");
     assert.deepEqual(decide(state, { type: "model_read", name: "telemetry-probe", asset: false, error: false }, attrs), []);
   });
 
@@ -88,7 +88,7 @@ describe("decide", () => {
     const state = createState();
     decide(state, { type: "session_start", skillCount: 1, offered: true, providers, subagent: false }, attrs);
     const first = decide(state, { type: "autoload_skill", id: "e1", name: "telemetry-probe" }, attrs);
-    assert.equal(first[0]?.attributes["omp.skill.invocation_kind"], "autoload");
+    assert.equal(first[0]?.attributes["skill.invocation_kind"], "autoload");
     assert.deepEqual(decide(state, { type: "autoload_skill", id: "e1", name: "telemetry-probe" }, attrs), []);
   });
 
@@ -109,9 +109,9 @@ describe("decide", () => {
   test("skillReadLogLine puts name and context in the message", () => {
     const line = skillReadLogLine({
       ...attrs,
-      "omp.skill.name": "telemetry-probe",
-      "omp.skill.invocation_kind": "model",
-      "omp.skill.provider": "native",
+      "skill.name": "telemetry-probe",
+      "skill.invocation_kind": "model",
+      "skill.provider": "native",
     });
     assert.match(line, /skill read/);
     assert.match(line, /name=telemetry-probe/);
@@ -120,7 +120,7 @@ describe("decide", () => {
     assert.match(line, /model=test-model/);
     assert.match(line, /repo=skill-telemetry/);
     assert.match(line, /session=s1/);
-    assert.match(line, /subagent=false/);
+    assert.match(line, /is_subagent=false/);
   });
 
   test("injectable meter records discovered on session_start", async () => {
@@ -214,6 +214,6 @@ describe("decide", () => {
     assert.equal(infos.length, 1);
     assert.match(infos[0]?.message ?? "", /name=telemetry-probe/);
     assert.match(infos[0]?.message ?? "", /invocation_kind=model/);
-    assert.equal((infos[0]?.context as { "omp.skill.name"?: string })["omp.skill.name"], "telemetry-probe");
+    assert.equal((infos[0]?.context as { "skill.name"?: string })["skill.name"], "telemetry-probe");
   });
 });

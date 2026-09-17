@@ -16,7 +16,7 @@ Emit OpenTelemetry **metrics** to an OTLP collector so the operator can answer:
 - By which path (model-invoked, user-invoked, autoloaded)?
 - In which repo, session, and model context?
 
-**Definition of "turn":** one user-prompt-to-assistant-settle cycle within a session. A session contains many turns. One `omp -p` run is a session containing one turn. This term is load-bearing for `omp.skill.turns`; see open question 9 for how to confirm the event boundary.
+**Definition of "turn":** one user-prompt-to-assistant-settle cycle within a session. A session contains many turns. One `omp -p` run is a session containing one turn. This term is load-bearing for `skill.turns`; see open question 9 for how to confirm the event boundary.
 
 The plugin must work as a standard OMP extension loaded from user config. **Do not fork or patch OMP source.** If an objective cannot be met without a source change, record it in section 10 rather than editing the host.
 
@@ -50,7 +50,7 @@ Two skill reads in one interactive session produced the value 2. **No label carr
 
 - Instrumentation scope is `@oh-my-pi/pi-coding-agent`. The plugin must use a **different** scope name so its instruments stay separable from the host's.
 - The tool-name label is the semconv key `gen_ai_tool_name`, not a custom key. Reuse it.
-- The host prefixes its own non-semconv labels with `pi.omp.` (`pi_omp_tool_status`). The plugin should stay in the distinct `omp.skill.*` namespace so plugin-emitted series are trivially separable from host-emitted ones.
+- The host prefixes its own non-semconv labels with `pi.omp.` (`pi_omp_tool_status`). The plugin should stay in the distinct `skill.*` namespace so plugin-emitted series are trivially separable from host-emitted ones.
 - Default `job` is `oh-my-pi`, so `OTEL_SERVICE_NAME` defaults to `oh-my-pi`, not `omp`.
 
 **Counters accumulate per process, not across runs.** Each `omp -p` is a separate process with a fresh MeterProvider starting at zero. It exports 1, exits, and the next run exports 1 again; the Prometheus exporter reflects latest-value-per-series rather than summing across producers, so repeated headless runs sit at 1 forever. Two consequences:
@@ -75,8 +75,8 @@ The spec is written as a set of requirements, not a plan. Implement in this orde
 | --- | --- | --- |
 | 0 | Read the source files in section 3. Answer open questions 1, 2, 5, 9 by reading `hooks/types.ts`. Write the answers into the README. | You can name the real field for the read path and confirm `turn_end` exists |
 | 1 | Scaffold the package (section 4), install it, register a `session_start` handler that logs once. | `omp` starts, your log line appears, nothing is broken |
-| 2 | Implement `omp.skill.skill_reads` for the model path only. Ignore the other two paths. | Fixture skill read produces one increment with the correct name |
-| 3 | Implement `omp.skill.turns` and `omp.skill.discovered_on_session_start`. | The ratio query in section 5 returns a sensible number |
+| 2 | Implement `skill.reads` for the model path only. Ignore the other two paths. | Fixture skill read produces one increment with the correct name |
+| 3 | Implement `skill.turns` and `skill.discovered_on_session_start`. | The ratio query in section 5 returns a sensible number |
 | 4 | Implement the `/skill:` user path (open questions 1 and 6). | `invocation_kind="user"` appears, no double-count |
 | 5 | Autoload path, or a documented decision not to cover it. | README states the outcome either way |
 | 6 | Unit tests, README, manual transcript. | Every box in section 8 is ticked |
@@ -86,7 +86,7 @@ Phases 4 and 5 are allowed to fail. If the event surface does not exist, documen
 ## 2. Non-goals
 
 - Tracing / spans. Metrics only. (If tracing is wanted later it is a separate plugin; see section 9 for prior art.)
-- Instrumenting tools other than skill reads. (`omp.skill.turns` is in scope as the denominator, not as general tool instrumentation.)
+- Instrumenting tools other than skill reads. (`skill.turns` is in scope as the denominator, not as general tool instrumentation.)
 - Measuring whether the model actually *followed* a skill. This plugin measures load events, not compliance.
 - Shipping a collector. The operator supplies an OTLP endpoint.
 
@@ -137,7 +137,7 @@ Use `ExtensionAPI` (`@oh-my-pi/pi-coding-agent`), not the legacy `HookAPI`. The 
 ```json
 {
   "name": "skill-telemetry",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "files": ["src"],
   "omp": { "extensions": ["./src/main.ts"] },
@@ -169,57 +169,57 @@ Instrumentation scope: `omp.skill-telemetry`, version from `package.json`. This 
 
 | Instrument | Type | Unit | Description |
 | --- | --- | --- | --- |
-| `omp.skill.skill_reads` | Counter (uint) | `{read}` | One increment per hydration of a skill body |
-| `omp.skill.turns` | Counter (uint) | `{turn}` | One increment per turn in which skills were offered to the model |
-| `omp.skill.discovered_on_session_start` | UpDownCounter | `{skill}` | Skills discovered when the session starts |
+| `skill.reads` | Counter (uint) | `{read}` | One increment per hydration of a skill body |
+| `skill.turns` | Counter (uint) | `{turn}` | One increment per turn in which skills were offered to the model |
+| `skill.discovered_on_session_start` | UpDownCounter | `{skill}` | Skills discovered when the session starts |
 
-Asset reads and load errors are explicitly **out of scope**. Do not implement `omp.skill.asset_reads` or `omp.skill.load_errors`. A read of `skill://<name>/<path>` should be ignored entirely rather than counted under a separate instrument.
+Asset reads and load errors are explicitly **out of scope**. Do not implement `skill.asset_reads` or `skill.load_errors`. A read of `skill://<name>/<path>` should be ignored entirely rather than counted under a separate instrument.
 
 ### Why `skill_reads` and not `invocations`
 
 The name matches what is actually measured. Per section 3, the model does not "invoke" a skill through any dedicated mechanism; it emits a `read` against `skill://<name>` and the body comes back. The read **is** the hydration and **is** the decision. Naming the counter after the observable event keeps the metric honest about what it can and cannot tell you.
 
-The `/skill:<name>` and autoload paths are not literally `read` calls, but they hydrate the same body, so they belong on the same counter and are distinguished by `omp.skill.invocation_kind`.
+The `/skill:<name>` and autoload paths are not literally `read` calls, but they hydrate the same body, so they belong on the same counter and are distinguished by `skill.invocation_kind`.
 
-### `omp.skill.turns` semantics (read this before implementing)
+### `skill.turns` semantics (read this before implementing)
 
 This is the **denominator**. Every turn is an opportunity for the model to read a skill: the system prompt carries the name-and-description list, and the model either acts on it or does not. Counting turns gives you the base rate that `skill_reads` is measured against.
 
 The useful quantity is a ratio computed at query time, not a metric:
 
 ```
-rate(omp_skill_skill_reads_total{omp_skill_name="x"}) / rate(omp_skill_turns_total)
+rate(skill_reads_total{skill_name="x"}) / rate(skill_turns_total)
 ```
 
 A skill read on 2 of 400 turns has a description that is not matching the work. That is the same signal the removed `considerations` counter was reaching for, obtained at N-times-lower volume: one increment per turn instead of one per skill per turn.
 
 Rules for this instrument:
 
-1. **`omp.skill.turns` carries no `omp.skill.name`.** It is not per skill. Attaching a skill name would make the denominator meaningless and multiply the series count by the skill count. This is the single most likely implementation error.
+1. **`skill.turns` carries no `skill.name`.** It is not per skill. Attaching a skill name would make the denominator meaningless and multiply the series count by the skill count. This is the single most likely implementation error.
 2. **Only count turns where skills were actually offered.** If `skills.enabled` is false, or discovery returned nothing, or the `read` tool is unavailable (in which case `system-prompt.ts` omits the skills list entirely), the model had no opportunity and the turn must not be counted. Otherwise the denominator is inflated by turns where a read was impossible.
 3. **Emit once per turn at `turn_end`**, not per message or per tool call.
 4. If turn boundaries are not cleanly observable, fall back to counting agent runs at `agent_end` and rename the instrument to match. Do not silently redefine "turn."
 
-Carry `omp.skill.discovered_on_session_start` as a sibling so the denominator can be interpreted: 3 reads across 400 turns means something different with 2 skills installed than with 40.
+Carry `skill.discovered_on_session_start` as a sibling so the denominator can be interpreted: 3 reads across 400 turns means something different with 2 skills installed than with 40.
 
-**Attributes** on `omp.skill.skill_reads`:
+**Attributes** on `skill.reads`:
 
 | Key | Values | Notes |
 | --- | --- | --- |
-| `omp.skill.name` | string | **Required.** Normalized; lowercase; exact match against discovered name. This is the primary pivot |
-| `omp.skill.invocation_kind` | `model` \| `user` \| `autoload` | Maps to the three paths in section 3 |
-| `omp.skill.provider` | `native`, `omp-plugins`, `claude`, `agents`, `codex`, `opencode`, `github`, `omp-managed` | From discovery metadata; `unknown` if unresolvable |
-| `omp.session.id` | string | From event context |
+| `skill.name` | string | **Required.** Normalized; lowercase; exact match against discovered name. This is the primary pivot |
+| `skill.invocation_kind` | `model` \| `user` \| `autoload` | Maps to the three paths in section 3 |
+| `skill.provider` | `native`, `omp-plugins`, `claude`, `agents`, `codex`, `opencode`, `github`, `omp-managed` | From discovery metadata; `unknown` if unresolvable |
+| `agent.session.id` | string | From event context |
 | `omp.agent.role` | `default`, `smol`, `slow`, `plan`, `task`, ... | Omit if unavailable |
 | `gen_ai.request.model` | string | Active model for the turn, if exposed on context |
-| `vcs.repository.name` | string | Git root basename; `"none"` when no repo root resolves. Always emit the key, so the attribute set stays identical across series and the ratio in `omp.skill.turns` does not break on repo-less sessions |
-| `omp.subagent` | boolean | True when the event originates inside a `task` subagent |
+| `vcs.repository.name` | string | Git root basename; `"none"` when no repo root resolves. Always emit the key, so the attribute set stays identical across series and the ratio in `skill.turns` does not break on repo-less sessions |
+| `agent.is_subagent` | boolean | True when the event originates inside a `task` subagent |
 
-**Attributes** on `omp.skill.turns`: everything in the table above **except** `omp.skill.name`, `omp.skill.invocation_kind`, and `omp.skill.provider`, which are per-skill concepts. Keeping `omp.session.id`, `omp.agent.role`, `gen_ai.request.model`, `vcs.repository.name`, and `omp.subagent` aligned across both instruments is what makes the ratio sliceable by model and repo.
+**Attributes** on `skill.turns`: everything in the table above **except** `skill.name`, `skill.invocation_kind`, and `skill.provider`, which are per-skill concepts. Keeping `agent.session.id`, `omp.agent.role`, `gen_ai.request.model`, `vcs.repository.name`, and `agent.is_subagent` aligned across both instruments is what makes the ratio sliceable by model and repo.
 
-Follow OpenTelemetry GenAI semantic conventions for any attribute that has an established key (`gen_ai.*`, `vcs.*`). Use the `omp.*` namespace only for concepts the conventions do not cover.
+Follow OpenTelemetry GenAI semantic conventions for any attribute that has an established key (`gen_ai.*`, `vcs.*`). Use `skill.*` and `agent.*` for plugin concepts the conventions do not cover.
 
-**No cardinality cap on `omp.skill.name`.** Expected scale is tens of skills. Emit the real name always; do not bucket into `__other__`. The cardinality risk here is `omp.session.id`, not the skill name, so drop the session attribute first if series count becomes a problem.
+**No cardinality cap on `skill.name`.** Expected scale is tens of skills. Emit the real name always; do not bucket into `__other__`. The cardinality risk here is `agent.session.id`, not the skill name, so drop the session attribute first if series count becomes a problem.
 
 ## 5b. Relationship to OMP's built-in OTEL export (important)
 
@@ -282,20 +282,20 @@ Honor the standard `OTEL_*` variables so the plugin drops into an existing colle
 2. **Flush on exit (Design B only; skip entirely under Design A).** Short `omp -p` one-shot runs can exit before a periodic exporter fires. Call `meterProvider.forceFlush()` then `shutdown()` on `session_shutdown`, and also on `agent_end` if the run may terminate without a shutdown event. Bound the flush with a timeout (default 2000 ms) so a dead collector never hangs the CLI.
 3. **Never block the agent.** Handlers must not return `{ block: true }`. A thrown error in a `tool_call` handler **blocks the tool, fail-closed**, so every handler body must be wrapped in try/catch that swallows and logs. This is the single highest-risk defect in this plugin.
 4. **Zero user-visible output** unless debug is on. No `ctx.ui.notify` on the hot path.
-5. **Subagents.** `task` fans out subagents. Verify empirically whether subagent sessions load extensions in the same process; if they do, deduplicate double-counting between parent and child, and set `omp.subagent=true` on child events.
+5. **Subagents.** `task` fans out subagents. Verify empirically whether subagent sessions load extensions in the same process; if they do, deduplicate double-counting between parent and child, and set `agent.is_subagent=true` on child events.
 
 ## 8. Acceptance criteria
 
 The implementation is done when all of the following hold. All criteria use the `telemetry-probe` fixture from section 1b; **no criterion may name a skill that is not created by the test itself**.
 
-- [ ] `read skill://telemetry-probe` in a live session produces exactly one `omp.skill.skill_reads` increment with `invocation_kind="model"`, `omp.skill.name="telemetry-probe"`.
+- [ ] `read skill://telemetry-probe` in a live session produces exactly one `skill.reads` increment with `invocation_kind="model"`, `skill.name="telemetry-probe"`.
 - [ ] `read skill://telemetry-probe/assets/example.txt` increments **nothing**. Asset reads are out of scope.
-- [ ] A turn in which `telemetry-probe` is read increments `omp.skill.turns` by exactly 1 and `omp.skill.skill_reads{omp.skill.name="telemetry-probe"}` by exactly 1.
-- [ ] A turn with no skill read increments `omp.skill.turns` by 1 and leaves `omp.skill.skill_reads` unchanged.
-- [ ] `omp.skill.turns` carries **no** `omp.skill.name` attribute, and its series count does not grow when a second fixture skill is installed.
-- [ ] With `skills.enabled: false`, `omp.skill.turns` does not increment at all, since no skill was offered.
-- [ ] `omp.skill.discovered_on_session_start` reports 2 when two fixture skills are installed.
-- [ ] `omp.skill.name` carries the real skill name on both counters, with no bucketing.
+- [ ] A turn in which `telemetry-probe` is read increments `skill.turns` by exactly 1 and `skill.reads{skill.name="telemetry-probe"}` by exactly 1.
+- [ ] A turn with no skill read increments `skill.turns` by 1 and leaves `skill.reads` unchanged.
+- [ ] `skill.turns` carries **no** `skill.name` attribute, and its series count does not grow when a second fixture skill is installed.
+- [ ] With `skills.enabled: false`, `skill.turns` does not increment at all, since no skill was offered.
+- [ ] `skill.discovered_on_session_start` reports 2 when two fixture skills are installed.
+- [ ] `skill.name` carries the real skill name on both counters, with no bucketing.
 - [ ] `/skill:telemetry-probe some args` produces one increment with `invocation_kind="user"` and does not double-count if the same skill is then read via `skill://`.
 - [ ] **Three reads in one interactive session** yield a counter value of 3. Per section 1b, repeated `omp -p` runs will each report 1 and prove nothing; this assertion must be made within a single process.
 - [ ] The exported resource carries a `service.instance.id` (or an equivalent instance-distinguishing attribute) so concurrent and sequential sessions do not clobber one another's series.
@@ -339,7 +339,7 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=http://<collector>:4318 \
 mkdir -p ~/.omp/agent/skills/telemetry-probe && printf -- '---\nname: telemetry-probe\ndescription: No-op fixture skill for telemetry checks.\n---\nReply with exactly: PROBE-OK\n' > ~/.omp/agent/skills/telemetry-probe/SKILL.md
 omp -p "read skill://telemetry-probe and follow it"
 sleep 25
-curl -s <collector>:8889/metrics | grep -E 'omp_skill|pi_omp_agent_tool_calls'
+curl -s <collector>:8889/metrics | grep -E 'skill_reads|skill_turns|skill_discovered|pi_omp_agent_tool_calls'
 ```
 
 Ship the fixture as `test/fixtures/telemetry-probe/` in the package and have the install step copy it into a scratch skills root.
@@ -360,8 +360,8 @@ Record answers in the README as you go. Questions marked **[answered]** were res
 2. Does `tool_call` expose the read path as `input.path`, `input.file_path`, or something else? The field name used in the sketch below is a guess.
 3. Is session/model/role metadata reachable from the handler `ctx`, or does it require the open-sdk fork? Stock OMP does not expose internals such as settings and model registry through `ExtensionAPI.openSdk`; if a needed attribute is only available there, **drop the attribute** rather than requiring a fork.
 4. Do subagent sessions load user extensions?
-5. Is there a `session_start` surface that exposes the discovered skills list? Needed for `omp.skill.discovered_on_session_start`, and for gating `omp.skill.turns` on whether any skill was actually offered. Less critical than it was under the removed consideration design, since `turns` needs only a count and a non-empty check rather than the full name set.
-9. Does a `turn_end` event exist on `ExtensionAPI`, and does its context expose the session and model metadata needed for attributes? The Arize integration forwards `before_agent_start`, `turn_end`, `agent_end`, and `session_shutdown`, so `turn_end` is very likely available, but confirm the payload. This is **blocking** for `omp.skill.turns`, which is meaningless without a reliable turn boundary. If turns are not cleanly observable, count agent runs at `agent_end` instead, rename the instrument accordingly, and document the change in meaning rather than quietly relabeling runs as turns.
+5. Is there a `session_start` surface that exposes the discovered skills list? Needed for `skill.discovered_on_session_start`, and for gating `skill.turns` on whether any skill was actually offered. Less critical than it was under the removed consideration design, since `turns` needs only a count and a non-empty check rather than the full name set.
+9. Does a `turn_end` event exist on `ExtensionAPI`, and does its context expose the session and model metadata needed for attributes? The Arize integration forwards `before_agent_start`, `turn_end`, `agent_end`, and `session_shutdown`, so `turn_end` is very likely available, but confirm the payload. This is **blocking** for `skill.turns`, which is meaningless without a reliable turn boundary. If turns are not cleanly observable, count agent runs at `agent_end` instead, rename the instrument accordingly, and document the change in meaning rather than quietly relabeling runs as turns.
 6. **Highest priority.** Does `/skill:<name>` move `pi_omp_agent_tool_calls_total` at all? Expectation is **no**, because the slash command reads the skill file directly from `filePath` rather than going through the `read` tool. If confirmed, the user-invocation path is invisible to the host entirely and the `input` event is the plugin's only hook for it, which makes question 1 blocking. Verify in the TUI with a scrape before and after `/skill:telemetry-probe`.
 7. Does the host set `service.instance.id` on its resource? The observed series carried only `job="oh-my-pi"` with nothing instance-distinguishing. If the host does not set one, the plugin must, or cross-session aggregation is impossible.
 8. **[answered]** Skill file location, description requirement, host counter shape, scope name, per-process counter semantics. See section 1b.
@@ -381,16 +381,16 @@ const SKILL_URL = /^skill:\/\/([^/?#]+)(\/[^?#]*)?$/i;
 export default function (pi: ExtensionAPI) {
   const meter = metrics.getMeter("omp.skill-telemetry", "1.0.0");
 
-  const skillReads = meter.createCounter("omp.skill.skill_reads", {
+  const skillReads = meter.createCounter("skill.reads", {
     unit: "{read}",
     description: "Hydrations of a skill body, by skill name and invocation kind",
   });
-  const turns = meter.createCounter("omp.skill.turns", {
+  const turns = meter.createCounter("skill.turns", {
     unit: "{turn}",
     description: "Turns in which at least one skill was offered to the model",
   });
   const discovered = meter.createUpDownCounter(
-    "omp.skill.discovered_on_session_start",
+    "skill.discovered_on_session_start",
     { unit: "{skill}", description: "Skills discovered when the session started" },
   );
 
@@ -401,12 +401,12 @@ export default function (pi: ExtensionAPI) {
   /** Attributes shared by BOTH instruments. Never put a skill name in here. */
   function contextAttrs(ctx: unknown): Attributes {
     return {
-      "omp.session.id": /* TODO ctx.sessionId */ "unknown",
+      "agent.session.id": /* TODO ctx.sessionId */ "unknown",
       "gen_ai.request.model": /* TODO */ "unknown",
       // Always emit the key with a sentinel, never omit it: a missing key on one
       // instrument and not the other breaks the reads/turns ratio at query time.
       "vcs.repository.name": /* TODO */ "none",
-      "omp.subagent": /* TODO */ false,
+      "agent.is_subagent": /* TODO */ false,
     };
   }
 
@@ -433,8 +433,8 @@ export default function (pi: ExtensionAPI) {
 
       skillReads.add(1, {
         ...contextAttrs(ctx),
-        "omp.skill.name": name.toLowerCase(),
-        "omp.skill.invocation_kind": "model",
+        "skill.name": name.toLowerCase(),
+        "skill.invocation_kind": "model",
       });
     } catch {
       // A throw here BLOCKS the tool, fail-closed. Swallow everything.
@@ -457,7 +457,7 @@ Not shown, and still required:
 
 - The `/skill:<name>` path via the `input` event, emitting `invocation_kind="user"` (open questions 1 and 6).
 - The autoload path, emitting `invocation_kind="autoload"` (open question 4), or a documented decision not to cover it.
-- `omp.skill.provider`, which needs discovery metadata the sketch does not have wired.
+- `skill.provider`, which needs discovery metadata the sketch does not have wired.
 - Resolution of `contextAttrs`, every field of which is currently a placeholder.
 - `service.instance.id` on the resource, per open question 7.
 
