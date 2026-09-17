@@ -1,6 +1,6 @@
 # Manual verification transcript
 
-Date: 2026-09-12. Host: omp 18.1.15. Plugin: skill-telemetry 0.1.0.
+Date: 2026-09-12. Host: omp 18.1.15. Plugin: skill-telemetry 0.2.0.
 
 ## Unit tests (no collector)
 
@@ -18,7 +18,7 @@ Covered:
 | `skill://telemetry-probe/assets/example.txt` increments nothing | pass |
 | Turn with a read: turns +1 and skill_reads +1 | pass (separate turn_end + model_read cases) |
 | Turn with no read: turns +1, skill_reads unchanged | pass |
-| `omp.skill.turns` has no `omp.skill.name` | pass |
+| `skill.turns` has no `skill.name` | pass |
 | `skills.enabled: false` / nothing offered: turns does not increment | pass |
 | `discovered_on_session_start` is 2 for two fixtures | pass (`skillCount: 2`) |
 | Real skill name, no bucketing | pass |
@@ -44,7 +44,7 @@ mkdir -p ~/.omp/agent/skills/telemetry-probe
 cp test/fixtures/telemetry-probe/SKILL.md ~/.omp/agent/skills/telemetry-probe/SKILL.md
 omp --no-extensions -e "$PWD/src/main.ts" -p "read skill://telemetry-probe and follow it"
 sleep 25
-curl -s <collector>:8889/metrics | grep -E 'omp_skill|pi_omp_agent_tool_calls'
+curl -s <collector>:8889/metrics | grep -E 'skill_reads|skill_turns|skill_discovered|pi_omp_agent_tool_calls'
 ```
 
-Expected live checks still outstanding: `PROBE-OK` print, scrape of `omp_skill_skill_reads_total{omp_skill_name="telemetry-probe",omp_skill_invocation_kind="model"}`, unreachable collector does not hang (Design A: host flush), `service.instance.id` absent unless `OTEL_RESOURCE_ATTRIBUTES` is set on the host, TUI `/skill:telemetry-probe` user path, subagent `autoloadSkills`.
+Expected live checks still outstanding: `PROBE-OK` print, scrape of `skill_reads_total{skill_name="telemetry-probe",skill_invocation_kind="model"}`, unreachable collector does not hang (Design A: host flush), `service.instance.id` absent unless `OTEL_RESOURCE_ATTRIBUTES` is set on the host, TUI `/skill:telemetry-probe` user path, subagent `autoloadSkills`.

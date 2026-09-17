@@ -5,16 +5,16 @@ import { getMeter, isNoopMeterProvider, SCOPE } from "./otel.ts";
 import { parseSkillCommand, parseSkillUrl, repoName, skillProvider } from "./skills.ts";
 
 export type CtxAttrs = {
-  "omp.session.id": string;
+  "agent.session.id": string;
   "gen_ai.request.model": string;
   "vcs.repository.name": string;
-  "omp.subagent": boolean;
+  "agent.is_subagent": boolean;
 };
 
 export type Instrument =
-  | "omp.skill.skill_reads"
-  | "omp.skill.turns"
-  | "omp.skill.discovered_on_session_start";
+  | "skill.reads"
+  | "skill.turns"
+  | "skill.discovered_on_session_start";
 
 export type Emission = { instrument: Instrument; value: number; attributes: Attributes };
 
@@ -41,13 +41,13 @@ export function createState(): State {
 
 function reads(attrs: CtxAttrs, name: string, kind: "model" | "user" | "autoload", provider: string): Emission {
   return {
-    instrument: "omp.skill.skill_reads",
+    instrument: "skill.reads",
     value: 1,
     attributes: {
       ...attrs,
-      "omp.skill.name": name,
-      "omp.skill.invocation_kind": kind,
-      "omp.skill.provider": provider,
+      "skill.name": name,
+      "skill.invocation_kind": kind,
+      "skill.provider": provider,
     },
   };
 }
@@ -60,7 +60,7 @@ export function decide(state: State, event: TelemetryEvent, attrs: CtxAttrs): Em
       state.userThisTurn.clear();
       state.seenAutoload.clear();
       if (event.skillCount > 0 && !event.subagent) {
-        return [{ instrument: "omp.skill.discovered_on_session_start", value: event.skillCount, attributes: attrs }];
+        return [{ instrument: "skill.discovered_on_session_start", value: event.skillCount, attributes: attrs }];
       }
       return [];
     }
@@ -68,7 +68,7 @@ export function decide(state: State, event: TelemetryEvent, attrs: CtxAttrs): Em
       state.userThisTurn.clear();
       return [];
     case "turn_end":
-      return state.offered ? [{ instrument: "omp.skill.turns", value: 1, attributes: attrs }] : [];
+      return state.offered ? [{ instrument: "skill.turns", value: 1, attributes: attrs }] : [];
     case "user_skill": {
       if (!state.providers.has(event.name)) return [];
       state.userThisTurn.add(event.name);
@@ -113,10 +113,10 @@ function isSubagent(ctx: ExtensionContext): boolean {
 
 function attrs(ctx: ExtensionContext): CtxAttrs {
   return {
-    "omp.session.id": ctx.sessionManager.getSessionId() || "unknown",
+    "agent.session.id": ctx.sessionManager.getSessionId() || "unknown",
     "gen_ai.request.model": ctx.model?.id || ctx.models.current()?.id || "unknown",
     "vcs.repository.name": repoName(ctx.cwd),
-    "omp.subagent": isSubagent(ctx),
+    "agent.is_subagent": isSubagent(ctx),
   };
 }
 
@@ -137,14 +137,14 @@ function autoloads(ctx: ExtensionContext): Array<{ id: string; name: string }> {
 
 /** Info-level file log for a counted skill-body hydration. */
 export function skillReadLogLine(attributes: Attributes): string {
-  const name = String(attributes["omp.skill.name"] ?? "unknown");
-  const kind = String(attributes["omp.skill.invocation_kind"] ?? "unknown");
-  const provider = String(attributes["omp.skill.provider"] ?? "unknown");
+  const name = String(attributes["skill.name"] ?? "unknown");
+  const kind = String(attributes["skill.invocation_kind"] ?? "unknown");
+  const provider = String(attributes["skill.provider"] ?? "unknown");
   const model = String(attributes["gen_ai.request.model"] ?? "unknown");
   const repo = String(attributes["vcs.repository.name"] ?? "none");
-  const session = String(attributes["omp.session.id"] ?? "unknown");
-  const subagent = attributes["omp.subagent"] === true;
-  return `[${SCOPE}] skill read name=${name} invocation_kind=${kind} provider=${provider} model=${model} repo=${repo} session=${session} subagent=${subagent}`;
+  const session = String(attributes["agent.session.id"] ?? "unknown");
+  const subagent = attributes["agent.is_subagent"] === true;
+  return `[${SCOPE}] skill read name=${name} invocation_kind=${kind} provider=${provider} model=${model} repo=${repo} session=${session} is_subagent=${subagent}`;
 }
 
 function apply(
@@ -157,13 +157,13 @@ function apply(
 ): void {
   for (const row of rows) {
     switch (row.instrument) {
-      case "omp.skill.skill_reads":
+      case "skill.reads":
         inst.skill_reads.add(row.value, row.attributes);
         break;
-      case "omp.skill.turns":
+      case "skill.turns":
         inst.turns.add(row.value, row.attributes);
         break;
-      case "omp.skill.discovered_on_session_start":
+      case "skill.discovered_on_session_start":
         inst.discovered.add(row.value, row.attributes);
         break;
       default: {
@@ -193,15 +193,15 @@ export default function skillTelemetry(pi: ExtensionAPI, options?: SkillTelemetr
     if (inst) return inst;
     const meter = options?.meter ?? getMeter();
     inst = {
-      skill_reads: meter.createCounter("omp.skill.skill_reads", {
+      skill_reads: meter.createCounter("skill.reads", {
         unit: "{read}",
         description: "Hydrations of a skill body, by skill name and invocation kind",
       }),
-      turns: meter.createCounter("omp.skill.turns", {
+      turns: meter.createCounter("skill.turns", {
         unit: "{turn}",
         description: "Turns in which at least one skill was offered to the model",
       }),
-      discovered: meter.createUpDownCounter("omp.skill.discovered_on_session_start", {
+      discovered: meter.createUpDownCounter("skill.discovered_on_session_start", {
         unit: "{skill}",
         description: "Skills discovered when the session started",
       }),
@@ -213,7 +213,7 @@ export default function skillTelemetry(pi: ExtensionAPI, options?: SkillTelemetr
     const rows = decide(state, event, attrs(ctx));
     apply(meters(), rows);
     for (const row of rows) {
-      if (row.instrument !== "omp.skill.skill_reads") continue;
+      if (row.instrument !== "skill.reads") continue;
       pi.logger.info(skillReadLogLine(row.attributes), { ...row.attributes });
     }
   };

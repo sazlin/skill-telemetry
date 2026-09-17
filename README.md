@@ -70,23 +70,23 @@ The probe skill asks the model to reply with exactly that string. Metrics go to 
 
 | Metric | Meaning |
 | --- | --- |
-| `omp.skill.skill_reads` | A skill body was loaded into context |
-| `omp.skill.turns` | A turn where at least one skill was offered to the model |
-| `omp.skill.discovered_on_session_start` | How many skills were discovered when the session started |
+| `skill.reads` | A skill body was loaded into context |
+| `skill.turns` | A turn where at least one skill was offered to the model |
+| `skill.discovered_on_session_start` | How many skills were discovered when the session started |
 
 Series live under the instrumentation scope `omp.skill-telemetry`, separate from omp's own `@oh-my-pi/pi-coding-agent` metrics.
 
 How often skill `x` is loaded, as a fraction of turns:
 
 ```promql
-rate(omp_skill_skill_reads_total{omp_skill_name="x"}) / rate(omp_skill_turns_total)
+rate(skill_reads_total{skill_name="x"}) / rate(skill_turns_total)
 ```
 
-`omp.skill.turns` is the denominator. It is not per skill.
+`skill.turns` is the denominator. It is not per skill.
 
 A read is counted when the model does `read skill://<name>` (the skill body, not an asset), you invoke `/skill:<name>` in the TUI, or a subagent autoloads a skill. Each counted read also writes an info line to omp's file log (`~/.omp/logs/`) with the skill name, invocation kind, provider, model, repo, session, and whether it was a subagent. Failed reads and `skill://<name>/some-asset` are ignored.
 
-On skill reads: `omp.skill.name`, `omp.skill.invocation_kind` (`model`, `user`, or `autoload`), `omp.skill.provider`. On both reads and turns: `omp.session.id`, `gen_ai.request.model`, `vcs.repository.name` (`none` when there is no git root), `omp.subagent`.
+On skill reads: `skill.name`, `skill.invocation_kind` (`model`, `user`, or `autoload`), `skill.provider`. On both reads and turns: `agent.session.id`, `gen_ai.request.model`, `vcs.repository.name` (`none` when there is no git root), `agent.is_subagent`.
 
 | Setting | Env | `~/.omp/agent/config.yml` | Default |
 | --- | --- | --- | --- |
